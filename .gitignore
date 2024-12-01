@@ -1,0 +1,6 @@
+# Virtual environments
+.venv
+
+
+# don't post solutions
+inputs/
