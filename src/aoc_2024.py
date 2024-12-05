@@ -1,6 +1,6 @@
 import re
 import collections
-from typing import Annotated
+from typing import Annotated, DefaultDict
 import typer
 from pathlib import Path
 
@@ -266,7 +266,38 @@ def day5_part1(
 	] = get_path(day=5),
 ):
 	lines = input_path.read_text().splitlines()
+	index = list.index(lines, "")
+	page_ordering_rules, updates = lines[:index], lines[index + 1 :]
 
+	rules_before = collections.defaultdict(set)
+	rules_after = collections.defaultdict(set)
+
+	for rule in page_ordering_rules:
+		number_must_be_before, number_must_be_after = map(int, rule.split("|"))
+		rules_before[number_must_be_after].add(number_must_be_before)
+		rules_after[number_must_be_before].add(number_must_be_after)
+
+	updates = [list(map(int, update.split(","))) for update in updates]
+
+	def check(update):
+		"""O(n^2)"""
+		for i in range(len(update)):
+			elem = update[i]
+			for j in range(len(update)):
+				compare = update[j]
+				if j < i:
+					if compare in rules_after[elem]:
+						return False
+				elif j > i:
+					if compare in rules_before[elem]:
+						return False
+		return True
+
+	midpoint_sum = 0
+	for update in updates:
+		if check(update):
+			midpoint_sum += update[len(update) // 2]
+	print(midpoint_sum)
 
 def day5_part2(
 	input_path: Annotated[
@@ -274,7 +305,44 @@ def day5_part2(
 	] = get_path(day=5),
 ):
 	lines = input_path.read_text().splitlines()
+	index = list.index(lines, "")
+	page_ordering_rules, updates = lines[:index], lines[index + 1 :]
 
+	rules_before = collections.defaultdict(set)
+	rules_after = collections.defaultdict(set)
+
+	for rule in page_ordering_rules:
+		number_must_be_before, number_must_be_after = map(int, rule.split("|"))
+		rules_before[number_must_be_after].add(number_must_be_before)
+		rules_after[number_must_be_before].add(number_must_be_after)
+
+	updates = [list(map(int, update.split(","))) for update in updates]
+
+	def check(update: list[int]):
+		"""O(n^2)"""
+		for i in range(len(update)):
+			elem = update[i]
+			for j in range(len(update)):
+				compare = update[j]
+				if j < i:
+					if compare in rules_after[elem]:
+						return (i, j)
+				elif j > i:
+					if compare in rules_before[elem]:
+						return (i, j)
+		return None
+
+	midpoint_sum = 0
+	for update in updates:
+		problem = check(update)
+		should_sum = problem is not None
+		while problem:
+			x, y = problem
+			update[x], update[y] = update[y], update[x]
+			problem = check(update)
+		if should_sum:
+			midpoint_sum += update[len(update) // 2]
+	print(midpoint_sum)
 
 def day6_part1(
 	input_path: Annotated[

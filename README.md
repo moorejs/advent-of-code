@@ -2,7 +2,7 @@
 
 [Advent of Code 2024](https://adventofcode.com/2024)
 
-The code is slop, written optimizing for time-to-solution.
+The code is Python slop, written optimizing for time-to-solution.
 
 ### How to run
 
