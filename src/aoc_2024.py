@@ -1,6 +1,6 @@
 import re
 import collections
-from typing import Annotated, DefaultDict
+from typing import Annotated, Callable, DefaultDict, Optional
 import typer
 from pathlib import Path
 
@@ -171,17 +171,17 @@ class SafeGrid:
 	def __init__(self, *, lines: list[str]):
 		self.grid = [list(line) for line in lines]
 
-	def _is_safe(self, x, y):
+	def _is_safe(self, x: int, y: int):
 		if x < 0 or y < 0:
 			return False
 		if x >= len(self.grid[0]) or y >= len(self.grid):
 			return False
 		return True
 
-	def __getitem__(self, key):
+	def __getitem__(self, key: tuple[int, int]):
 		x, y = key
 		if not self._is_safe(x, y):
-			return "."
+			return None
 		return self.grid[y][x]
 
 	def __setitem__(self, key, value):
@@ -344,12 +344,50 @@ def day5_part2(
 			midpoint_sum += update[len(update) // 2]
 	print(midpoint_sum)
 
+
+def walk(*, grid: SafeGrid, on_step: Optional[Callable] = None):
+	dirs = [(0, 1), (-1, 0), (0, -1), (1, 0)]
+	dir = 2  # cheating - first pos is ^
+
+	x, y = None, None
+	for grid_x, grid_y in grid:
+		if grid[grid_x, grid_y] == "^":  # cheating - first pos is ^
+			x, y = grid_x, grid_y
+			break
+
+	assert x is not None and y is not None
+
+	unique = {(x, y)}
+	unique_with_dir = {(x, y, dir)}
+	while True:
+		x += dirs[dir][0]
+		y += dirs[dir][1]
+		if not grid[x, y]:
+			break
+		if grid[x, y] == "#":
+			x -= dirs[dir][0]
+			y -= dirs[dir][1]
+			dir = (dir + 1) % 4  # turn right
+			continue
+		unique.add((x, y))
+		if on_step:
+			on_step(x, y, dir)
+		if (x, y, dir) in unique_with_dir:
+			return None  # cycle
+		unique_with_dir.add((x, y, dir))
+	return unique
+
+
 def day6_part1(
 	input_path: Annotated[
 		Path, typer.Option(exists=True, dir_okay=False, readable=True)
 	] = get_path(day=6),
 ):
 	lines = input_path.read_text().splitlines()
+	grid = SafeGrid(lines=lines)
+
+	unique = walk(grid=grid)
+	print(len(unique))
 
 
 def day6_part2(
@@ -358,7 +396,22 @@ def day6_part2(
 	] = get_path(day=6),
 ):
 	lines = input_path.read_text().splitlines()
+	grid = SafeGrid(lines=lines)
 
+	add_obstacle = set()
+
+	def on_step(x, y, dir):
+		save = grid[x, y]
+		if save != ".":
+			return
+		grid[x, y] = "#"
+		if not walk(grid=grid, on_step=None):
+			print("cycle found", x, y)
+			add_obstacle.add((x, y))
+		grid[x, y] = save
+
+	walk(grid=grid, on_step=on_step)
+	print(len(add_obstacle))
 
 def day7_part1(
 	input_path: Annotated[
@@ -366,6 +419,29 @@ def day7_part1(
 	] = get_path(day=7),
 ):
 	lines = input_path.read_text().splitlines()
+	lines = [
+		re.search(pattern=r"(?P<sum>\d+): (?P<rest>.+)", string=line).groupdict()
+		for line in lines
+	]
+
+	for line in lines:
+		line["rest"] = list(map(int, line["rest"].split(" ")))
+
+	def solve(numbers, index, acc, sum):
+		if index == len(numbers):
+			# print(acc, sum)
+			return acc == sum
+		addition = acc + numbers[index]
+		multiplication = acc * numbers[index]
+		return solve(numbers, index + 1, addition, sum) or solve(
+			numbers, index + 1, multiplication, sum
+		)
+
+	final_sum = 0
+	for line in lines:
+		if solve(line["rest"], 1, line["rest"][0], int(line["sum"])):
+			final_sum += int(line["sum"])
+	print(final_sum)
 
 
 def day7_part2(
@@ -374,7 +450,31 @@ def day7_part2(
 	] = get_path(day=7),
 ):
 	lines = input_path.read_text().splitlines()
+	lines = [
+		re.search(pattern=r"(?P<sum>\d+): (?P<rest>.+)", string=line).groupdict()
+		for line in lines
+	]
 
+	for line in lines:
+		line["rest"] = list(map(int, line["rest"].split(" ")))
+
+	def solve(numbers, index, acc, sum):
+		if index == len(numbers):
+			return acc == sum
+		addition = acc + numbers[index]
+		multiplication = acc * numbers[index]
+		concat = int(str(acc) + str(numbers[index]))
+		return (
+			solve(numbers, index + 1, addition, sum)
+			or solve(numbers, index + 1, multiplication, sum)
+			or solve(numbers, index + 1, concat, sum)
+		)
+
+	final_sum = 0
+	for line in lines:
+		if solve(line["rest"], 1, line["rest"][0], int(line["sum"])):
+			final_sum += int(line["sum"])
+	print(final_sum)
 
 def day8_part1(
 	input_path: Annotated[
@@ -382,6 +482,40 @@ def day8_part1(
 	] = get_path(day=8),
 ):
 	lines = input_path.read_text().splitlines()
+	grid = SafeGrid(lines=lines)
+
+	nodes: DefaultDict[str, list[tuple[int, int]]] = collections.defaultdict(list)
+
+	for x, y in grid:
+		if grid[x, y] != ".":
+			nodes[grid[x, y]].append((x, y))
+	print(nodes)
+
+	antinodes: set[tuple[int, int]] = set()
+	for frequency, coordinates in nodes.items():
+		# pairwise compare every coordinate
+		for i in range(len(coordinates)):
+			for j in range(len(coordinates)):
+				if i == j:
+					continue
+				dx = coordinates[i][0] - coordinates[j][0]
+				dy = coordinates[i][1] - coordinates[j][1]
+				new_coord = (coordinates[i][0] + dx, coordinates[i][1] + dy)
+				print(
+					"comparing",
+					i,
+					j,
+					coordinates[i],
+					coordinates[j],
+					dx,
+					dy,
+					grid[dx * 2, dy * 2],
+				)
+				if grid[new_coord] and grid[new_coord] != frequency:
+					print(grid[new_coord], frequency)
+					antinodes.add(new_coord)
+	print(antinodes)
+	print(len(antinodes))
 
 
 def day8_part2(
@@ -390,6 +524,49 @@ def day8_part2(
 	] = get_path(day=8),
 ):
 	lines = input_path.read_text().splitlines()
+	grid = SafeGrid(lines=lines)
+
+	nodes: DefaultDict[str, list[tuple[int, int]]] = collections.defaultdict(list)
+
+	for x, y in grid:
+		if grid[x, y] != ".":
+			nodes[grid[x, y]].append((x, y))
+	print(nodes)
+
+	antinodes: set[tuple[int, int]] = set()
+	for frequency, coordinates in nodes.items():
+		# pairwise compare every coordinate
+		for i in range(len(coordinates)):
+			for j in range(len(coordinates)):
+				if i == j:
+					continue
+				dx = coordinates[i][0] - coordinates[j][0]
+				dy = coordinates[i][1] - coordinates[j][1]
+				antinodes.add(coordinates[i])
+				mult = 1
+				while True:
+					new_coord = (
+						coordinates[i][0] + dx * mult,
+						coordinates[i][1] + dy * mult,
+					)
+					if not grid[new_coord]:
+						break
+					if grid[new_coord] != frequency:
+						antinodes.add(new_coord)
+					mult += 1
+				mult = -1
+				while True:
+					new_coord = (
+						coordinates[i][0] + dx * mult,
+						coordinates[i][1] + dy * mult,
+					)
+					if not grid[new_coord]:
+						break
+					if grid[new_coord] != frequency:
+						antinodes.add(new_coord)
+					mult -= 1
+
+	print(len(antinodes))
 
 
 def day9_part1(
